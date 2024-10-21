@@ -1,24 +1,3 @@
-/*
-	simduino.c
-
-	Copyright 2008, 2009 Michel Pollet <buserror@gmail.com>
-
-	This file is part of simavr.
-
-	simavr is free software: you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation, either version 3 of the License, or
-	(at your option) any later version.
-
-	simavr is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-	GNU General Public License for more details.
-
-	You should have received a copy of the GNU General Public License
-	along with simavr.  If not, see <http://www.gnu.org/licenses/>.
- */
-
 #include <unistd.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -37,6 +16,7 @@
 #include "sim_gdb.h"
 #include "uart_pty.h"
 #include "sim_vcd_file.h"
+#include "avr_uart.h"
 
 uart_pty_t uart_pty;
 avr_t *avr = NULL;
@@ -108,12 +88,21 @@ void sig_int(int sign)
 	}
 }
 
+
+int8_t port_e = 0;
+
+void pin_changed_hook_e(struct avr_irq_t *irq, uint32_t value, void *param)
+{
+	    printf("Pin state changed: %u\n", value);
+
+}
+
 int main(int argc, char *argv[])
 {
 	signal(SIGINT, sig_int);
 
 	struct avr_flash flash_data;
-	char boot_path[1024] = "ATmegaBOOT_168_atmega328.ihex";
+	char boot_path[1024] = "./ATmegaBOOT_168_atmega328.ihex";
 	uint32_t boot_base, boot_size;
 	char *mmcu = "atmega328p";
 	uint32_t freq = 16000000;
@@ -141,11 +130,7 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "%s: Unable to load %s\n", argv[0], boot_path);
 		exit(1);
 	}
-	if (boot_base > 32 * 1024 * 1024)
-	{
-		mmcu = "atmega2560";
-		freq = 20000000;
-	}
+
 	printf("%s bootloader 0x%05x: %d bytes\n", mmcu, boot_base, boot_size);
 
 	avr = avr_make_mcu_by_name(mmcu);
@@ -170,40 +155,51 @@ int main(int argc, char *argv[])
 	avr->pc = boot_base;
 	/* end of flash, remember we are writing /code/ */
 	avr->codeend = avr->flashend;
-	avr->log = 1 + verbose;
+	// avr->log = 1 + verbose;
 
-	// Initialize VCD file for tracking
-	// 	avr_vcd_t vcd_file;
-	// 	avr_vcd_init(avr, "output.vcd", &vcd_file, 10); // 10ms period
+	// avr_vcd_init(avr, "output.vcd", &vcd_file, 10); // microseconds
 
-	// 	// Register signals for tracking
-	// 	avr_vcd_add_signal(&vcd_file, avr_io_getirq(avr, AVR_IOCTL_IOPORT_GETIRQ('B'), 5), 1, "PB5");		// Pin B5 (LED)
-	// 	avr_vcd_add_signal(&vcd_file, avr_io_getirq(avr, AVR_IOCTL_IOPORT_GETIRQ('D'), 1), 1, "TX_PD1");	// Pin D1 (TX)
-	// avr_vcd_add_signal(&vcd_file, avr_io_getirq(avr, AVR_IOCTL_IOPORT_GETIRQ('U'), 0), 8, "UART_UDR");
+	// // 	// Register signals for tracking
+	// avr_irq_t *uart_tx_irq = avr_io_getirq(avr, AVR_IOCTL_UART_GETIRQ('0'), UART_IRQ_OUTPUT); // UART0 TX
+	// avr_irq_t *uart_rx_irq = avr_io_getirq(avr, AVR_IOCTL_UART_GETIRQ('0'), UART_IRQ_INPUT);  // UART0 RX
 
-	// 	avr_vcd_start(&vcd_file);
+	// avr_vcd_add_signal(&vcd_file, uart_tx_irq, 1, "uart_tx");
+	// avr_vcd_add_signal(&vcd_file, uart_rx_irq, 1, "uart_rx");
+	// avr_vcd_add_signal(&vcd_file, avr_io_getirq(avr, AVR_IOCTL_IOPORT_GETIRQ('B'), 5), 1, "PB5"); // Pin B5 (LED)
+	// 																							  // 	avr_vcd_add_signal(&vcd_file, avr_io_getirq(avr, AVR_IOCTL_IOPORT_GETIRQ('D'), 1), 1, "TX_PD1");	// Pin D1 (TX)
+	// 																							  // avr_vcd_add_signal(&vcd_file, avr_io_getirq(avr, AVR_IOCTL_IOPORT_GETIRQ('U'), 0), 8, "UART_UDR");
+	// 																							  // Register UDR0 signal to track changes in the data register
+	// avr_irq_t *udr_irq = avr_io_getirq(avr, AVR_IOCTL_UART_GETIRQ('0'), UART_IRQ_OUTPUT);		  // UDR0 using UART output interrupt
+	// avr_vcd_add_signal(&vcd_file, udr_irq, 8, "uart_udr");										  // Log UDR0 as an 8-bit signal
+
+	// avr_vcd_start(&vcd_file);
 
 	// even if not setup at startup, activate gdb if crashing
-	avr->gdb_port = 1234;
-	if (debug)
-	{
-		avr->state = cpu_Stopped;
-		avr_gdb_init(avr);
-	}
+	// avr->gdb_port = 1234;
+	// if (debug)
+	// {
+	// 	avr->state = cpu_Stopped;
+	// 	avr_gdb_init(avr);
+	// }
 
 	uart_pty_init(avr, &uart_pty);
 	uart_pty_connect(&uart_pty, '0');
 
+
+		avr_irq_register_notify(avr_io_getirq(avr, AVR_IOCTL_IOPORT_GETIRQ('B'), 5), pin_changed_hook_e, NULL);
+
+
 	while (!stop_simulation)
 	{
 		int state = avr_run(avr);
+		// printf(avr_io_getirq(avr, AVR_IOCTL_IOPORT_GETIRQ('B'), 5)); // Get IRQ for PORTB
+
 		if (state == cpu_Done || state == cpu_Crashed)
 			break;
 	}
 	avr_terminate(avr);
-
-	return 0;
-
 	// avr_vcd_stop(&vcd_file);
 	// avr_vcd_close(&vcd_file);
+	return 0;
 }
+
