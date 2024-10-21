@@ -1,50 +1,11 @@
-#
-# This makefile take each "at*" file, extracts it's part name
-# And compile it into an ELF binary.
-# It also disassemble it for debugging purposes.
-#
-# The code is compiled "optimized" to the max.
-#
-# The weird "-Wl,--undefined=_mmcu,--section-start=.mmcu=0x910000"
-# is used to tell the linker not to discard the .mmcu section,
-# otherwise the --gc-sections will delete it.
-#
-# 	Copyright 2008, 2009 Michel Pollet <buserror@gmail.com>
-#
-#	This file is part of simavr.
-#
-#	simavr is free software: you can redistribute it and/or modify
-#	it under the terms of the GNU General Public License as published by
-#	the Free Software Foundation, either version 3 of the License, or
-#	(at your option) any later version.
-#
-#	simavr is distributed in the hope that it will be useful,
-#	but WITHOUT ANY WARRANTY; without even the implied warranty of
-#	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#	GNU General Public License for more details.
-#
-#	You should have received a copy of the GNU General Public License
-#	along with simavr.  If not, see <http://www.gnu.org/licenses/>.
-
 # simavr directory
 ifndef SIMAVR
 SIMAVR		:= ${shell for p in . .. ../.. ../../..;do test -d $$p/simavr/sim && echo $$p/simavr; done}
 endif
 
-# check if it is found
-ifeq ("$(wildcard $(SIMAVR)/sim/)","")
-$(warning Simavr path not found. SIMAVR=$(SIMAVR))
-endif
-
-# You can override the build settings with local changes in this file
-# for example:
-# export CC=clang
-# export CFLAGS=-march=corei7-avx
-# etc
--include ${wildcard ${SIMAVR}/../.make.options*}
-
 # get the first character of what the compiler says it is, unless it's 'x86_64' doh
 ARCH 		:= ${shell $(CC) -dumpmachine | sed -e 's/^x/i/' -e 's/\(.\).*/\1/'}
+
 
 CFLAGS		+= -O2 -Wall -Wextra -Wno-unused-parameter \
 			-Wno-unused-result -Wno-missing-field-initializers \
@@ -52,59 +13,9 @@ CFLAGS		+= -O2 -Wall -Wextra -Wno-unused-parameter \
 CFLAGS		+= -g
 CORE_CFLAGS	= -DAVR_CORE=1
 
-ifeq (${shell uname}, Darwin)
- # gcc 4.2 from MacOS is really not up to scratch anymore
- CC			= clang
- AVR_ROOT 	:= "/Applications/Arduino.app/Contents/Java/hardware/tools/avr/"
- AVR 		:= ${AVR_ROOT}/bin/avr-
- # Thats for MacPorts libelf
- ifeq (${shell test -d /opt/local && echo Exists}, Exists)
-  ifneq (${shell test -d /opt/local/avr && echo Exists}, Exists)
-   $(error Please install avr-gcc: port install avr-gcc avr-libc)
-  endif
-  ifneq (${shell test -d /opt/local/include/libelf && echo Exists}, Exists)
-   $(error Please install libelf: port install libelf)
-  endif
-  CC		= clang
-  IPATH		+= /opt/local/include /opt/local/include/libelf
-  LFLAGS	= -L/opt/local/lib/
-  AVR 		:= /opt/local/bin/avr-
- else
-  # That's for Homebrew libelf and avr-gcc support
-  HOMEBREW_PREFIX ?= /usr/local
-  ifeq (${shell test -d $(HOMEBREW_PREFIX)/Cellar && echo Exists}, Exists)
-   ifneq (${shell test -d $(HOMEBREW_PREFIX)/Cellar/avr-gcc* && echo Exists}, Exists)
-    $(error Please install avr-gcc: brew tap osx-cross/homebrew-avr ; brew install avr-libc)
-   endif
-   ifneq (${shell test -d $(HOMEBREW_PREFIX)/Cellar/libelf/ && echo Exists}, Exists)
-    $(error Please install libelf: brew install libelf)
-   endif
-   CC			= clang
-   IPATH		+= $(HOMEBREW_PREFIX)/include
-   LFLAGS		= -L$(HOMEBREW_PREFIX)/lib/
-   CFLAGS		+= -I/$(HOMEBREW_PREFIX)/include/libelf
-   AVR_ROOT		:= $(firstword $(wildcard $(HOMEBREW_PREFIX)/Cellar/avr-libc/*/))
-   AVR			:= $(HOMEBREW_PREFIX)/bin/avr-
-  endif
- endif
-else
- AVR 		:= avr-
-endif
-
-# FIXME uname -o doesn't work on bsd derivatives
-WIN		:= ${shell uname -o}
-
-ifeq (${WIN}, Msys)
-AVR_ROOT	:= /mingw64/avr
-# compiler is globally available, no need to direct to a full path
-AVR		:= avr-
-IPATH		+= ${PREFIX}/include
-CFLAGS		+= -I${PREFIX}/include
-LDFLAGS		+= -L/lib -L/local/lib
-CFLAGS 		+= -DNO_COLOR
-else
+AVR 		:= avr-
 CFLAGS 		+= -fPIC
-endif
+
 
 CPPFLAGS	+= --std=gnu99 -Wall
 CPPFLAGS	+= ${patsubst %,-I%,${subst :, ,${IPATH}}}
@@ -127,7 +38,7 @@ C_LIBELF	:= ${shell pkg-config --cflags \
 			libelf 2>/dev/null && \
 			echo -DHAVE_LIBELF=1 }
 LD_LIBELF	:= ${shell pkg-config --libs libelf }
-# Hmmm silly libdwarf doesn't have a .pc file! Its 2023 guys...
+
 C_LIBDWARF	:= ${shell ls /usr/include/libdwarf/libdwarf.h >/dev/null 2>&1 && \
 			echo -DHAVE_LIBDWARF=1 }
 LD_LIBDWARF	:= ${shell ls /usr/include/libdwarf/libdwarf.h >/dev/null 2>&1 && \
@@ -136,9 +47,6 @@ LD_LIBDWARF	:= ${shell ls /usr/include/libdwarf/libdwarf.h >/dev/null 2>&1 && \
 CFLAGS		+= $(C_LIBELF) $(C_LIBDWARF)
 LDFLAGS		+= $(LD_LIBELF) $(LD_LIBDWARF)
 
-ifeq (${WIN}, Msys)
-LDFLAGS     	 += -lws2_32
-endif
 
 # for clock_gettime on RHEL 6.X
 ifneq ("$(wildcard /usr/lib/librt.so /usr/lib64/librt.so)","")
@@ -156,17 +64,6 @@ LFLAGS		+= -Wl,-rpath,${LIBDIR}
 endif
 endif
 
-ifeq (${V}, 1)
-E		=
-else
-E		= @
-endif
-
-# The code is compiled "optimized" to the max.
-#
-# The weird "-Wl,--undefined=_mmcu,--section-start=.mmcu=0x910000"
-# is used to tell the linker not to discard the .mmcu section,
-# otherwise the --gc-sections will delete it.
 
 %.hex: %.axf
 	@${AVR}objcopy -j .text -j .data -j .eeprom -O ihex ${<} ${@}
@@ -176,9 +73,6 @@ endif
 
 # --mcall-prologues can be used here, but messes up debugging a little
 %.axf: %.c
-ifneq ($(E),)
-	@echo AVR-CC ${<}
-endif
 	${AVR}gcc -Wall -gdwarf-2 -Os -std=gnu99 \
 			-mmcu=${shell v=${<} && echo $${v/_*}} \
 			-DF_CPU=8000000 \
@@ -192,24 +86,13 @@ endif
 
 # this rule has precedence
 ${OBJ}/sim_%.o : cores/sim_%.c | ${OBJ}
-ifneq ($(E),)
-	@echo CORE $<
-endif
-	${E}$(CC) $(CPPFLAGS) $(CFLAGS) $(CORE_CFLAGS) -MMD \
-		${AVR_CPPFLAGS} \
-		$<  -c -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(CORE_CFLAGS) -MMD ${AVR_CPPFLAGS} $<  -c -o $@
 
 ${OBJ}/%.o: %.c | ${OBJ}
-ifneq ($(E),)
-	@echo CC $<
-endif
-	${E}$(CC) $(CPPFLAGS) $(CFLAGS) -MMD $< -c -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD $< -c -o $@
 
 ${OBJ}/%.elf:
-ifneq ($(E),)
-	@echo LD $@
-endif
-	${E}$(CC) -MMD ${CFLAGS}  ${LFLAGS} -o $@ ${filter %.o,$^} $(LDFLAGS)
+	$(CC) -MMD ${CFLAGS}  ${LFLAGS} -o $@ ${filter %.o,$^} $(LDFLAGS)
 
 
 .PRECIOUS: ${OBJ}/%.a ${OBJ}/%.so.1
@@ -217,19 +100,13 @@ endif
 # Static library
 #
 ${OBJ}/%.a:
-ifneq ($(E),)
-	@echo AR $@
-endif
-	${E}$(AR) cru $@ ${filter %.o,$^} && $(RANLIB) $@
+	$(AR) cru $@ ${filter %.o,$^} && $(RANLIB) $@
 
 #
 # Shared library (Linux)
 #
 ${OBJ}/%.so.1: ${OBJ}/%.a
-ifneq ($(E),)
-	@echo SHARED $@
-endif
-	${E}$(CC) -o $@ -shared \
+	$(CC) -o $@ -shared \
 		-Wl,--whole-archive,-soname,${basename ${notdir $@}}.1 \
 		${filter %.o %.a,$^} \
 		 -Wl,--no-whole-archive \
@@ -241,18 +118,10 @@ ${OBJ}/%.so: ${OBJ}/%.so.1
 obj: ${OBJ}
 
 ${OBJ}:
-	${E}mkdir -p ${OBJ}
+	mkdir -p ${OBJ}
 
 clean-${OBJ}:
 	rm -rf ${OBJ}
-
-# Generates the necessary file to help clangd index the files properly.
-# This currently has to be done manually, but helps a lot if you use 'kate'
-# editor or anthing else that is compatible with the LSP protocol
-compile_commands.json: lsp
-lsp:
-	$$(which gmake) V=1 --always-make --dry-run | \
-		sh $(SIMAVR)/../doc/clangd_gen.sh >compile_commands.json
 
 # include the dependency files generated by gcc, if any
 -include ${wildcard ${OBJ}/*.d}

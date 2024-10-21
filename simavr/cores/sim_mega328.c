@@ -27,7 +27,7 @@
 
 #define _AVR_IO_H_
 #define __ASSEMBLER__
-#include "avr/iom328p.h"
+#include </usr/lib/avr/include/avr/iom328p.h> // TODO: really wtf
 // instantiate the new core
 #include "sim_megax8.h"
 

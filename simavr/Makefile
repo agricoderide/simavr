@@ -1,21 +1,3 @@
-#
-# 	Copyright 2008-2012 Michel Pollet <buserror@gmail.com>
-#
-#	This file is part of simavr.
-#
-#	simavr is free software: you can redistribute it and/or modify
-#	it under the terms of the GNU General Public License as published by
-#	the Free Software Foundation, either version 3 of the License, or
-#	(at your option) any later version.
-#
-#	simavr is distributed in the hope that it will be useful,
-#	but WITHOUT ANY WARRANTY; without even the implied warranty of
-#	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#	GNU General Public License for more details.
-#
-#	You should have received a copy of the GNU General Public License
-#	along with simavr.  If not, see <http://www.gnu.org/licenses/>.
-
 SHELL 			:= ${shell which bash}
 SIMAVR_VERSION	:= ${shell \
 	git describe --abbrev=0 --tags || \
@@ -53,93 +35,32 @@ ${OBJ}/libsimavr.a	:	${sim_o}
 
 
 libsimavr	: config ${OBJ}/libsimavr.a
-# shared library won't work that easily on non-linux
-ifeq (${shell uname}, Linux)
 libsimavr	: ${OBJ}/libsimavr.so
-endif
+
 
 ${OBJ}/${target}.elf	: libsimavr
 ${OBJ}/${target}.elf	: ${OBJ}/${target}.o
 
 ${target}	: ${OBJ}/${target}.elf
 
-# FIXME uname -o doesn't work on BSD
-#ifeq (${shell uname -o}, Msys)
-#	ln -sf $< $@.exe
-#else
 	ln -sf $< $@
-#endif
+
 
 clean: clean-${OBJ}
 	rm -rf ${target} *.a *.so *.exe
 	rm -f sim_core_*.h
 
-install : all
-	$(MKDIR) $(DESTDIR)/include/simavr/avr
-	$(INSTALL) -m644 sim/*.h $(DESTDIR)/include/simavr/
-	$(INSTALL) -m644 sim_core_*.h $(DESTDIR)/include/simavr/
-	$(INSTALL) -m644 sim/avr/*.h $(DESTDIR)/include/simavr/avr/
-	$(MKDIR) $(DESTDIR)/lib
-	$(INSTALL) ${OBJ}/libsimavr.a $(DESTDIR)/lib/
-	$(MKDIR) $(DESTDIR)/lib/pkgconfig/
-	sed -e "s|PREFIX|${PREFIX}|g" -e "s|VERSION|${SIMAVR_VERSION}|g" \
-		simavr-avr.pc >$(DESTDIR)/lib/pkgconfig/simavr-avr.pc
-	sed -e "s|PREFIX|${PREFIX}|g" -e "s|VERSION|${SIMAVR_VERSION}|g" \
-		simavr.pc >$(DESTDIR)/lib/pkgconfig/simavr.pc
-ifeq (${shell uname}, Linux)
-	$(INSTALL) ${OBJ}/libsimavr.so.1 $(DESTDIR)/lib/
-	ln -sf libsimavr.so.1 $(DESTDIR)/lib/libsimavr.so
-endif
-	$(MKDIR) $(DESTDIR)/bin
-	$(INSTALL) ${OBJ}/${target}.elf $(DESTDIR)/bin/simavr
+config: sim_core_config.h sim_core_decl.h
 
-# Needs 'fpm', oneline package manager. Install with 'gem install fpm'
-# This generates 'mock' debian files, without all the policy, scripts
-# and all the things normal debian requires. If debian decides to roll
-# in simavr officialy, this section shall diseapear
-debian:
-	rm -rf /tmp/simavr-tmp && mkdir -p /tmp/simavr-tmp/usr && \
-	make cleam; make install DESTDIR=/tmp/simavr-tmp/usr RELEASE=1 && \
-	(cd /tmp/simavr-tmp && \
-	fpm -s dir -t deb -C /tmp/simavr-tmp -n libsimavr -v $(SIMAVR_VERSION) \
-		--iteration $(SIMAVR_REVISION) \
-		-d 'libelf' \
-        --description "lean and mean Atmel AVR simulator: Runtime library" \
-        usr/lib/lib*.so* && \
-	fpm -s dir -t deb -C /tmp/simavr-tmp -n libsimavr-dev -v $(SIMAVR_VERSION) \
-		--iteration $(SIMAVR_REVISION) \
-		-d 'libsimavr >= $(SIMAVR_VERSION)' \
-        --description "lean and mean Atmel AVR simulator: Development files" \
-        usr/include usr/lib/lib*.a usr/lib/pkgconfig && \
-	fpm -s dir -t deb -C /tmp/simavr-tmp -n simavr -v $(SIMAVR_VERSION) \
-		--iteration $(SIMAVR_REVISION) \
-		-d 'libsimavr >= $(SIMAVR_VERSION)' \
-        --description "lean and mean Atmel AVR simulator: Executable" \
-        usr/bin ) && \
-	echo Done
 
-config: ${OBJ}/cores.deps sim_core_config.h sim_core_decl.h
-
-#
-# this tries to preprocess all the cores and decide
-# which ones have a chance of compiling at all. Some platform
-# ship with old version of avr-gcc and associated and needs
-# to be verified
-#
-ifeq ($(V), 1)
-DEBUGLOG=/tmp/simavr_conf.log
-else
-DEBUGLOG=/dev/null
-endif
-sim_core_config.h ${OBJ}/cores.deps: $(cores) Makefile
+sim_core_config.h: $(cores) Makefile
 	@echo CONF $@
 	@conf=""; decl=""; array=""; \
-	mkdir -p ${OBJ} ; echo >${OBJ}/cores.deps ; echo >$(DEBUGLOG) ;\
 	for core in cores/*.c ; do \
 		file=$$core; global=$${core/cores\/sim_}; global=$${global/.c}; \
 		upper=$$(echo $$global|tr '[a-z]' '[A-Z]'); \
 		if $(CC) -E $(CFLAGS) ${AVR_CPPFLAGS} $$file \
-			>>$(DEBUGLOG) 2>&1 ; then \
+			>>/dev/null 2>&1 ; then \
 			conf+="#define CONFIG_$$upper 1\n"; \
 			obj=$${file/.c/.o} ; obj=$${obj/cores\/}; \
 			printf "\$${OBJ}/libsimavr.a: \$${OBJ}/$$obj\n">>${OBJ}/cores.deps ; \

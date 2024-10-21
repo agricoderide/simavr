@@ -32,7 +32,6 @@
 #include "sim_avr.h"
 #include "sim_time.h"
 #include "sim_utils.h"
-#include "sim_core_config.h"
 
 DEFINE_FIFO(avr_vcd_log_t, avr_vcd_fifo);
 
@@ -581,8 +580,6 @@ avr_vcd_start(
 
 	time(&now);
 	fprintf(vcd->output, "$date %s$end\n", ctime(&now));
-	fprintf(vcd->output,
-		"$version Simavr " CONFIG_SIMAVR_VERSION " $end\n");
 	fprintf(vcd->output, "$timescale 10ns $end\n");	// 10ns base, aka 100MHz
 	fprintf(vcd->output, "$scope module logic $end\n");
 

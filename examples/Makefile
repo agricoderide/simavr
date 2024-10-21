@@ -1,22 +1,29 @@
+target=	simduino
+firm_src = ${wildcard atmega*.c}
+firmware = ${firm_src:.c=.hex}
+simavr = ../../
 
-boards_base=${wildcard board_*}
-# Remove simduino until FileMapping is implemented to work around missing mmap in Win32
-ifeq (${shell uname -o}, Msys)
-boards=${subst board_usb,,${subst board_simduino,,$(boards_base)}}
-else
-boards=$(boards_base)
-endif
+IPATH = .
+IPATH += ../parts
+IPATH += ${simavr}/include
+IPATH += ${simavr}/simavr/sim
 
-all:
-	for bi in ${boards}; do $(MAKE) -C $$bi; done
+VPATH = .
+VPATH += ../parts
 
-clean:
-	for bi in ${boards}; do $(MAKE) -C $$bi clean; done
+LDFLAGS += -lpthread -lutil
 
-#
-# The USB example is not made by default, as it downloads stuff
-# for the vhci library, it fails the debian policy on being able
-# to build offline.
-#
-extra_board_usb:
-	make -C extra_board_usb
+all: obj ${firmware} ${target}
+
+include ${simavr}/Makefile.common
+
+board = ${OBJ}/${target}.elf
+
+${board} : ${OBJ}/uart_pty.o
+${board} : ${OBJ}/${target}.o
+
+${target}: ${board}
+	@echo $@ done
+
+clean: clean-${OBJ}
+	rm -rf *.a *.axf ${target} *.vcd *.hex
